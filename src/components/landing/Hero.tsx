@@ -36,9 +36,14 @@ export function Hero() {
             <Button size="lg" onClick={open}>
               {HERO.primary} <ArrowRight className="h-4 w-4" />
             </Button>
-            <Button size="lg" variant="secondary">
+            <a
+              href={HERO.demoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-hairline bg-surface px-6 py-3.5 text-sm font-medium tracking-tight text-foreground transition-all duration-200 hover:bg-surface-elevated"
+            >
               <Play className="h-3.5 w-3.5" /> {HERO.secondary}
-            </Button>
+            </a>
           </div>
           <div className="mt-6 text-xs text-muted-foreground">
             48-hour trial · No credit card auto-renewal · Cancel anytime

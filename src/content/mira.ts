@@ -4,6 +4,7 @@ export const HERO = {
   sub: "MIRA connects workforce signals, activates specialised AI agents, and tells leaders what to investigate and what to do next.",
   primary: "Try MIRA for ₹49",
   secondary: "Watch Demo",
+  demoUrl: "http://13.232.73.179:3000/",
 };
 
 export const PROBLEMS = [
