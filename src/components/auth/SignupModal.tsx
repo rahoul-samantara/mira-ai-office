@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,7 +8,9 @@ import { X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { recordSignupTraffic } from "@/services/signups";
 
-const schema = z
+export type AuthMode = "signup" | "signin";
+
+const signupSchema = z
   .object({
     fullName: z.string().min(2, "Enter your full name"),
     email: z.string().email("Enter a valid work email"),
@@ -22,29 +24,40 @@ const schema = z
     message: "Passwords don't match",
   });
 
-type FormValues = z.infer<typeof schema>;
+const signinSchema = z.object({
+  email: z.string().email("Enter a valid work email"),
+  password: z.string().min(1, "Enter your password"),
+});
+
+type SignupValues = z.infer<typeof signupSchema>;
+type SigninValues = z.infer<typeof signinSchema>;
 
 interface Props {
   open: boolean;
+  mode: AuthMode;
+  onModeChange: (mode: AuthMode) => void;
   onOpenChange: (open: boolean) => void;
 }
 
-export function SignupModal({ open, onOpenChange }: Props) {
+export function SignupModal({ open, mode, onModeChange, onOpenChange }: Props) {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+  const signupForm = useForm<SignupValues>({
+    resolver: zodResolver(signupSchema),
     defaultValues: { acceptTerms: false as unknown as true },
   });
 
-  const onSubmit = async (values: FormValues) => {
+  const signinForm = useForm<SigninValues>({
+    resolver: zodResolver(signinSchema),
+  });
+
+  useEffect(() => {
+    if (!open) setSubmitError(null);
+  }, [open, mode]);
+
+  const onSignup = async (values: SignupValues) => {
     setSubmitting(true);
     setSubmitError(null);
 
@@ -81,26 +94,52 @@ export function SignupModal({ open, onOpenChange }: Props) {
         console.error("[Signup] Could not record signup traffic", error);
       });
 
-      // Keep only checkout display details in this tab. Passwords are sent directly
-      // to Supabase Auth and are never persisted by the application.
-      sessionStorage.setItem(
-        "mira.signupDraft",
-        JSON.stringify({
-          fullName: values.fullName,
-          email: values.email,
-          organization: values.organization ?? "",
-        }),
-      );
+      saveDraft({
+        fullName: values.fullName,
+        email: values.email,
+        organization: values.organization ?? "",
+      });
 
       onOpenChange(false);
-      reset();
+      signupForm.reset();
       navigate({ to: "/checkout" });
     } catch (error) {
-      setSubmitError(toSignupErrorMessage(error));
+      setSubmitError(toAuthErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
   };
+
+  const onSignin = async (values: SigninValues) => {
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: values.email,
+        password: values.password,
+      });
+
+      if (error) throw error;
+      if (!data.user) throw new Error("Supabase did not return a user after sign in.");
+
+      saveDraft({
+        fullName: readUserName(data.user.user_metadata),
+        email: values.email,
+        organization: readOrganization(data.user.user_metadata),
+      });
+
+      onOpenChange(false);
+      signinForm.reset();
+      navigate({ to: "/checkout" });
+    } catch (error) {
+      setSubmitError(toAuthErrorMessage(error));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const isSignup = mode === "signup";
 
   return (
     <AnimatePresence>
@@ -132,85 +171,92 @@ export function SignupModal({ open, onOpenChange }: Props) {
 
             <div className="mb-6">
               <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                Start your MIRA trial
+                {isSignup ? "Start your MIRA trial" : "Welcome back"}
               </div>
               <h2 className="mt-2 font-display text-3xl leading-tight text-foreground">
-                Create your account
+                {isSignup ? "Create your account" : "Sign in to MIRA"}
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                48 hours of guided access for ₹49.
+                {isSignup ? "48 hours of guided access for INR 49." : "Continue to your checkout."}
               </p>
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <Field label="Full name" error={errors.fullName?.message}>
-                <input {...register("fullName")} className={inputCls} placeholder="Priya Sharma" />
-              </Field>
-              <Field label="Work email" error={errors.email?.message}>
-                <input
-                  {...register("email")}
-                  type="email"
-                  autoComplete="email"
-                  className={inputCls}
-                  placeholder="priya@company.com"
-                />
-              </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Password" error={errors.password?.message}>
+            {isSignup ? (
+              <form onSubmit={signupForm.handleSubmit(onSignup)} className="space-y-4">
+                <Field label="Full name" error={signupForm.formState.errors.fullName?.message}>
+                  <input {...signupForm.register("fullName")} className={inputCls} placeholder="Priya Sharma" />
+                </Field>
+                <Field label="Work email" error={signupForm.formState.errors.email?.message}>
                   <input
-                    {...register("password")}
-                    type="password"
-                    autoComplete="new-password"
+                    {...signupForm.register("email")}
+                    type="email"
+                    autoComplete="email"
                     className={inputCls}
+                    placeholder="priya@company.com"
                   />
                 </Field>
-                <Field label="Confirm" error={errors.confirmPassword?.message}>
-                  <input
-                    {...register("confirmPassword")}
-                    type="password"
-                    autoComplete="new-password"
-                    className={inputCls}
-                  />
-                </Field>
-              </div>
-              <Field label="Organization (optional)">
-                <input {...register("organization")} className={inputCls} placeholder="Acme Inc." />
-              </Field>
-
-              <label className="flex items-start gap-2 pt-1 text-xs text-muted-foreground">
-                <input
-                  type="checkbox"
-                  {...register("acceptTerms")}
-                  className="mt-0.5 accent-[var(--brand)]"
-                />
-                <span>I accept the Terms of Service and acknowledge MIRA's Privacy Policy.</span>
-              </label>
-              {errors.acceptTerms && (
-                <p className="text-xs text-destructive">{errors.acceptTerms.message}</p>
-              )}
-              {submitError && (
-                <div
-                  role="alert"
-                  className="rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 text-xs text-destructive"
-                >
-                  {submitError}
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Password" error={signupForm.formState.errors.password?.message}>
+                    <input
+                      {...signupForm.register("password")}
+                      type="password"
+                      autoComplete="new-password"
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field label="Confirm" error={signupForm.formState.errors.confirmPassword?.message}>
+                    <input
+                      {...signupForm.register("confirmPassword")}
+                      type="password"
+                      autoComplete="new-password"
+                      className={inputCls}
+                    />
+                  </Field>
                 </div>
-              )}
-              <button
-                type="submit"
-                disabled={submitting}
-                className="mt-2 w-full rounded-full bg-foreground py-3 text-sm font-medium text-background transition hover:opacity-90 disabled:opacity-60"
-              >
-                {submitting ? "Creating account..." : "Create account & continue"}
-              </button>
-              <button
-                type="button"
-                onClick={() => onOpenChange(false)}
-                className="w-full py-2 text-center text-xs text-muted-foreground transition hover:text-foreground"
-              >
-                I already have an account
-              </button>
-            </form>
+                <Field label="Organization (optional)">
+                  <input {...signupForm.register("organization")} className={inputCls} placeholder="Acme Inc." />
+                </Field>
+                <label className="flex items-start gap-2 pt-1 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    {...signupForm.register("acceptTerms")}
+                    className="mt-0.5 accent-[var(--brand)]"
+                  />
+                  <span>I accept the Terms of Service and acknowledge MIRA's Privacy Policy.</span>
+                </label>
+                {signupForm.formState.errors.acceptTerms && (
+                  <p className="text-xs text-destructive">
+                    {signupForm.formState.errors.acceptTerms.message}
+                  </p>
+                )}
+                <AuthError message={submitError} />
+                <SubmitButton submitting={submitting} label="Create account & continue" busyLabel="Creating account..." />
+                <ModeButton onClick={() => onModeChange("signin")}>I already have an account</ModeButton>
+              </form>
+            ) : (
+              <form onSubmit={signinForm.handleSubmit(onSignin)} className="space-y-4">
+                <Field label="Work email" error={signinForm.formState.errors.email?.message}>
+                  <input
+                    {...signinForm.register("email")}
+                    type="email"
+                    autoComplete="email"
+                    className={inputCls}
+                    placeholder="priya@company.com"
+                  />
+                </Field>
+                <Field label="Password" error={signinForm.formState.errors.password?.message}>
+                  <input
+                    {...signinForm.register("password")}
+                    type="password"
+                    autoComplete="current-password"
+                    className={inputCls}
+                  />
+                </Field>
+                <AuthError message={submitError} />
+                <SubmitButton submitting={submitting} label="Sign in & continue" busyLabel="Signing in..." />
+                <ModeButton onClick={() => onModeChange("signup")}>Create a new account</ModeButton>
+              </form>
+            )}
           </motion.div>
         </motion.div>
       )}
@@ -218,23 +264,80 @@ export function SignupModal({ open, onOpenChange }: Props) {
   );
 }
 
-function toSignupErrorMessage(error: unknown) {
-  if (!(error instanceof Error)) return "We couldn't create your account. Please try again.";
+function saveDraft(draft: { fullName?: string; email: string; organization?: string }) {
+  sessionStorage.setItem("mira.signupDraft", JSON.stringify(draft));
+}
+
+function readUserName(metadata: Record<string, unknown>) {
+  return typeof metadata.full_name === "string" ? metadata.full_name : "";
+}
+
+function readOrganization(metadata: Record<string, unknown>) {
+  return typeof metadata.organization === "string" ? metadata.organization : "";
+}
+
+function toAuthErrorMessage(error: unknown) {
+  if (!(error instanceof Error)) return "We couldn't complete that request. Please try again.";
 
   const message = error.message.toLowerCase();
   if (message.includes("already registered") || message.includes("already exists")) {
     return "An account with this email already exists. Sign in instead.";
   }
+  if (message.includes("invalid login credentials")) return "Invalid email or password.";
+  if (message.includes("email not confirmed")) return "Please confirm your email before signing in.";
   if (message.includes("password")) return error.message;
-  if (message.includes("rate limit")) {
-    return "Too many signup attempts. Please wait a moment and try again.";
-  }
+  if (message.includes("rate limit")) return "Too many attempts. Please wait a moment and try again.";
   if (message.includes("missing supabase environment")) {
-    return "Account creation is not configured yet. Please contact support.";
+    return "Authentication is not configured yet. Please contact support.";
   }
 
-  return error.message || "We couldn't create your account. Please try again.";
+  return error.message || "We couldn't complete that request. Please try again.";
 }
+
+function AuthError({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <div
+      role="alert"
+      className="rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 text-xs text-destructive"
+    >
+      {message}
+    </div>
+  );
+}
+
+function SubmitButton({
+  submitting,
+  label,
+  busyLabel,
+}: {
+  submitting: boolean;
+  label: string;
+  busyLabel: string;
+}) {
+  return (
+    <button
+      type="submit"
+      disabled={submitting}
+      className="mt-2 w-full rounded-full bg-foreground py-3 text-sm font-medium text-background transition hover:opacity-90 disabled:opacity-60"
+    >
+      {submitting ? busyLabel : label}
+    </button>
+  );
+}
+
+function ModeButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full py-2 text-center text-xs text-muted-foreground transition hover:text-foreground"
+    >
+      {children}
+    </button>
+  );
+}
+
 const inputCls =
   "w-full rounded-xl border border-hairline bg-background/60 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none transition focus:border-[var(--brand)]/60 focus:ring-2 focus:ring-[var(--brand)]/20";
 
