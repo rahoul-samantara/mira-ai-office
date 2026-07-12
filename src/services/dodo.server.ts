@@ -10,19 +10,26 @@ interface TrialCheckoutInput {
 }
 
 function env(name: string) {
-  const value = process.env[name];
+  const value = process.env[name]?.trim();
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
 }
 
+function optionalEnv(name: string) {
+  return process.env[name]?.trim() || undefined;
+}
+
 function dodoClient() {
+  const baseOptions = {
+    bearerToken: env("DODO_PAYMENTS_API_KEY"),
+    webhookKey: optionalEnv("DODO_PAYMENTS_WEBHOOK_KEY"),
+  };
+  const baseURL = optionalEnv("DODO_PAYMENTS_BASE_URL");
+  if (baseURL) return new DodoPayments({ ...baseOptions, baseURL });
+
   const environment =
     process.env.DODO_PAYMENTS_ENVIRONMENT === "live_mode" ? "live_mode" : "test_mode";
-  return new DodoPayments({
-    bearerToken: env("DODO_PAYMENTS_API_KEY"),
-    webhookKey: process.env.DODO_PAYMENTS_WEBHOOK_KEY,
-    environment,
-  });
+  return new DodoPayments({ ...baseOptions, environment });
 }
 
 export async function createTrialCheckout(input: TrialCheckoutInput) {
