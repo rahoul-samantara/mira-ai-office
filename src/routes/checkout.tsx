@@ -45,16 +45,10 @@ function CheckoutPage() {
     setError(null);
     try {
       const { checkout_url } = await createDodoCheckout({
-        productId: "mira_trial",
-        amount: TRIAL_PRICE,
-        currency: "INR",
-        customer: {
-          email,
-          fullName: draft.fullName,
-          organization: draft.organization,
+        data: {
+          productId: "mira_trial",
+          origin: window.location.origin,
         },
-        successUrl: `${window.location.origin}/payment/success`,
-        cancelUrl: `${window.location.origin}/payment/cancel`,
       });
       window.location.assign(checkout_url);
     } catch (e) {
@@ -126,9 +120,6 @@ function CheckoutPage() {
             {error && (
               <div className="mt-4 rounded-2xl border border-hairline bg-surface p-3 text-xs text-muted-foreground">
                 {error}
-                <div className="mt-1 text-[11px] opacity-70">
-                  (Hermes will wire the backend endpoint before launch.)
-                </div>
               </div>
             )}
 

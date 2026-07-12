@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      mira_trials: {
+        Row: {
+          checkout_session_id: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          payment_id: string | null
+          product_key: string
+          starts_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          checkout_session_id: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          payment_id?: string | null
+          product_key: string
+          starts_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          checkout_session_id?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          payment_id?: string | null
+          product_key?: string
+          starts_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      mira_webhook_events: {
+        Row: {
+          event_type: string
+          processed_at: string
+          webhook_id: string
+        }
+        Insert: {
+          event_type: string
+          processed_at?: string
+          webhook_id: string
+        }
+        Update: {
+          event_type?: string
+          processed_at?: string
+          webhook_id?: string
+        }
+        Relationships: []
+      }
       hrbot_conversations: {
         Row: {
           attrition_risk: string | null
@@ -134,7 +191,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      activate_mira_trial: {
+        Args: {
+          p_checkout_session_id: string
+          p_event_type: string
+          p_payment_id: string
+          p_user_id: string
+          p_webhook_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
